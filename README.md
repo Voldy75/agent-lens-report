@@ -221,6 +221,14 @@ Everything on the page is measured or read from a file you control:
   convention of writing `./x.js` for `x.ts`), `@/...` shortcuts and `baseUrl`
   from the nearest `tsconfig.json` or `jsconfig.json`, and workspace packages
   imported by name in a monorepo.
+- **Web requests** join screens to the server, which imports never do. A call
+  such as `fetch('/api/orders/' + id)`, `useSWR('/api/flags')` or your own
+  `apiFetch('/api/...')` is matched to the route that answers it: Next.js
+  (`app/**/route.ts`, `pages/api`), SvelteKit (`+server.ts`), Nuxt
+  (`server/api`) or Express-style `router.get('/path')`, including routers
+  mounted with `app.use('/api', ...)`. They are drawn dotted blue on the map,
+  and user journeys can cross them. Calls to other companies' services are
+  ignored.
 - **Tested** means a test file actually imports that module — not a filename
   guess.
 - **Rewrite hotspots** are relative to this repo (85th percentile of commit
@@ -245,7 +253,9 @@ report without running anything. `report.html` is regenerated, so gitignore it.
 - **~90 modules is the readable ceiling.** Labels hide below 0.62 zoom; past
   that you want district collapsing, which isn't built yet.
 - **Import parsing is regex-based**, so dynamic imports (`import()` with a
-  computed path) are missed. Webpack or Vite aliases that are not also in
+  computed path) are missed. Web requests are found in JavaScript and
+  TypeScript only, and only when the path is written out (`fetch(url)` with a
+  computed `url` is missed); GraphQL and tRPC calls are not linked yet. Webpack or Vite aliases that are not also in
   `tsconfig.json`/`jsconfig.json` are missed too.
 - **Codex's on-disk layout has been changing across versions.** The adapter
   degrades loudly rather than reporting a wrong number, but check it against

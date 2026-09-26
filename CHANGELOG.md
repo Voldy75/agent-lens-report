@@ -2,6 +2,19 @@
 
 What changed in each version of `agent-lens-report`, newest first.
 
+## 0.4.0 — 2026-09-26
+
+### New
+
+- **Web requests on the map.** Screens are now linked to the server routes
+  they call: `fetch('/api/...')`, axios, ky, `$fetch`, `useSWR`, `useFetch`
+  and your own wrappers, matched to Next.js (app and pages router), SvelteKit,
+  Nuxt and Express-style routes. They are drawn dotted blue, and user journeys
+  in the authoring pass can now run from a screen through to the server and
+  its data. On two real Next.js projects, 41 of 43 and 19 of 21 calls were
+  matched; the rest were calls to outside services, which are ignored.
+- **ROADMAP.md**: what is planned next, as a checklist.
+
 ## 0.3.0 — 2026-09-26
 
 ### New

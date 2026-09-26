@@ -127,6 +127,7 @@ td.mono{font-family:var(--mono);font-size:12px}
 .lg{display:flex;gap:5px;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--graphite)}
 .lg i{width:12px;height:0;border-top:1.5px solid var(--ink);display:block}
 .lg i.dash{border-top-style:dashed;border-color:var(--ghost)}
+.lg i.req{border-top:1.5px dotted var(--blue)}
 .lg i.pay{width:7px;height:7px;border-radius:50%;background:var(--blue);border:0}
 .lg i.sc{width:9px;height:9px;border:1.5px solid var(--blue);background:repeating-linear-gradient(135deg,var(--blue) 0 1px,transparent 1px 3px)}
 .caption{position:absolute;left:50%;transform:translateX(-50%);bottom:44px;background:var(--ink);color:var(--sheet);padding:6px 13px;font-family:var(--mono);font-size:10.5px;white-space:nowrap;opacity:0;transition:opacity .18s;pointer-events:none;max-width:92%;overflow:hidden;text-overflow:ellipsis}
@@ -209,6 +210,7 @@ td.mono{font-family:var(--mono);font-size:12px}
         <div class="caption" id="cap"></div>
         <div class="stagebar"><div class="legend">
           <span class="lg"><i></i>Call path</span>
+          <span class="lg"><i class="req"></i>Web request</span>
           <span class="lg"><i class="dash"></i>Not built yet</span>
           <span class="lg"><i class="pay"></i>Payload</span>
           <span class="lg"><i class="sc"></i>In progress</span>
@@ -466,12 +468,14 @@ if (STATE.has.map) {
   STATE.edges.forEach(([a, b, kind]) => {
     const ma = byId(a), mb = byId(b);
     const p1 = centre(ma), p2 = centre(mb);
+    // Imports are solid; a web request (fetch('/api/...')) is dotted blue.
+    const base = kind === "ghost" ? "#AFB6AD" : kind === "request" ? "rgba(20,73,140,.55)" : "rgba(19,26,33,.32)";
     const line = el("line", {
       x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
-      stroke: kind === "ghost" ? "#AFB6AD" : "rgba(19,26,33,.32)", "stroke-width": 1.1,
-      "stroke-dasharray": kind === "ghost" ? "4 4" : "none"
+      stroke: base, "stroke-width": 1.1,
+      "stroke-dasharray": kind === "ghost" ? "4 4" : kind === "request" ? "1.5 3" : "none"
     });
-    line.dataset.base = kind === "ghost" ? "#AFB6AD" : "rgba(19,26,33,.32)";
+    line.dataset.base = base;
     gEdge.appendChild(line);
     edgeMap[a + ">" + b] = line; edgeMap[b + ">" + a] = line;
   });

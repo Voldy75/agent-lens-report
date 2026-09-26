@@ -358,6 +358,67 @@ function fixes() {
   ok('the note goes away once it is stable', !stateOf(flip).meta.planChanged);
   ok('nothing opens without a terminal', !/opened in your browser/.test(flipOut));
 
+  // "blocked" only counts when the wording says the step is blocked.
+  const { parseCheckboxes } = require(path.join(__dirname, '..', 'lib', 'collect', 'plans'));
+  const bl = parseCheckboxes([
+    '- [ ] Payments — blocked on provider approval',
+    '- [ ] Launch: blocked by legal review',
+    '- [ ] Emails (stuck on DNS)',
+    '- [ ] Prompts for blocked and pending steps',
+    '- [ ] Show which users are blocked from signing in'
+  ].join('\n'), 'plan').map((x) => x.status);
+  ok('"blocked on/by", "stuck" mark a step blocked', bl[0] === 'blocked' && bl[1] === 'blocked' && bl[2] === 'blocked', bl.join());
+  ok('mentioning "blocked" in a feature does not block it', bl[3] === 'pending' && bl[4] === 'pending', bl.join());
+
+  // --- web requests: screens reaching the server without an import --------
+  const { extractRequests, fileRoutes, codeRoutes, buildRequestEdges } = require(path.join(__dirname, '..', 'lib', 'collect', 'requests'));
+  const fileOf = (p, text) => {
+    const f = { path: p, requests: extractRequests(text || ''), fileRoutes: fileRoutes(p) };
+    const cr = codeRoutes(text || ''); f.codeRoutes = cr.routes; f.mounts = cr.mounts;
+    return f;
+  };
+  const reqFiles = [
+    // Next.js app router, with a route group and a dynamic segment, in two apps of a monorepo
+    fileOf('apps/admin/app/api/flags/route.ts'), // listed first, so only the same-app preference can pick shop's
+    fileOf('apps/shop/app/(store)/api/orders/[id]/route.ts'),
+    fileOf('apps/shop/app/api/flags/route.ts'),
+    fileOf('apps/shop/app/token/route.ts'),
+    fileOf('apps/shop/app/checkout/page.tsx', "const o = await fetch(`/api/orders/${id}`); const { data } = useSWR('/api/flags'); await fetch('https://oauth2.googleapis.com/token');"),
+    fileOf('apps/shop/app/cart/page.tsx', "await apiFetch('/api/orders/latest'); const note = '/api/flags';"),
+    // Next.js pages router, SvelteKit, Nuxt
+    fileOf('pages/api/login.ts'),
+    fileOf('components/LoginForm.tsx', "axios.post<Session>('/api/login', body)"),
+    fileOf('src/routes/api/items/[id]/+server.ts'),
+    fileOf('src/lib/items.ts', "const r = await fetch(`${base}/api/items/${itemId}?full=1`);"),
+    fileOf('server/api/cart.post.ts'),
+    fileOf('pages/cart.vue', "await $fetch('/api/cart', { method: 'POST' })"),
+    // Express router mounted under /api
+    fileOf('server/index.js', "const users = require('./users'); app.use('/api', users);"),
+    fileOf('server/users.js', "router.get('/users/:id', show); router.post('/users', create);"),
+    fileOf('web/profile.js', "fetch('/api/users/42'); fetch('/api/users', { method: 'POST' });")
+  ];
+  const selfOwner = new Map(reqFiles.map((f) => [f.path, f.path]));
+  const reqRes = buildRequestEdges(reqFiles, selfOwner);
+  const linked = (a, b) => reqRes.edges.some(([x, y, k]) => x === a && y === b && k === 'request');
+  ok('links a Next.js screen to its dynamic app-router route', linked('apps/shop/app/checkout/page.tsx', 'apps/shop/app/(store)/api/orders/[id]/route.ts'), JSON.stringify(reqRes.edges));
+  ok('in a monorepo, a screen reaches its own app\'s route', linked('apps/shop/app/checkout/page.tsx', 'apps/shop/app/api/flags/route.ts') && !linked('apps/shop/app/checkout/page.tsx', 'apps/admin/app/api/flags/route.ts'));
+  ok('a literal path matches a dynamic route; a wrapper call counts', linked('apps/shop/app/cart/page.tsx', 'apps/shop/app/(store)/api/orders/[id]/route.ts'));
+  ok('an outside service is not mistaken for a local route', !linked('apps/shop/app/checkout/page.tsx', 'apps/shop/app/token/route.ts'));
+  ok('a path string that is not a request is ignored', reqFiles.find((f) => f.path === 'apps/shop/app/cart/page.tsx').requests.join() === '/api/orders/latest');
+  ok('pages router, SvelteKit and Nuxt routes are matched', linked('components/LoginForm.tsx', 'pages/api/login.ts') && linked('src/lib/items.ts', 'src/routes/api/items/[id]/+server.ts') && linked('pages/cart.vue', 'server/api/cart.post.ts'), JSON.stringify(reqRes.edges));
+  ok('Express routes mounted under a prefix are matched', linked('web/profile.js', 'server/users.js'));
+
+  // End to end: a screen folder and a server folder become separate modules joined by a request.
+  const web = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-lens-fix-'));
+  write(path.join(web, 'client/cart.js'), "export async function add(item) { return fetch('/api/cart', { method: 'POST', body: JSON.stringify(item) }); }\n" + body(20));
+  write(path.join(web, 'server/index.js'), "const cart = require('./cart');\napp.use('/api', cart);\n" + body(20));
+  write(path.join(web, 'server/cart.js'), "router.post('/cart', (req, res) => res.json({}));\n" + body(20));
+  run(['scan'], web);
+  const ws = stateOf(web);
+  ok('web requests appear as connections on the map', ws.edges.some(([a, b, k]) => k === 'request' && a === 'client' && b === 'server'), JSON.stringify(ws.edges));
+  ok('the report counts requests found and matched', ws.meta.requests && ws.meta.requests.calls === 1 && ws.meta.requests.matched === 1, JSON.stringify(ws.meta.requests));
+  ok('the authoring prompt offers requests for journeys', /"request"\]/.test(run(['author', '--prompt'], web)));
+
   // --- going in circles --------------------------------------------------
   const loop = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-lens-fix-'));
   const commitAt = (cwd, daysAgo, msg) => {
